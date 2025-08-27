@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import io
-import requests # Used to simulate web search
+import requests  # Used to simulate web search
 
 # --- Page Configuration ---
 st.set_page_config(
@@ -70,46 +70,11 @@ st.markdown("""
 # --- Data Generation and Helper Functions ---
 
 @st.cache_data
-def create_sample_data():
+def data():
     """Creates a sample DataFrame to be used if no file is uploaded."""
-    data = {
-        'Customer First Name': ['John', 'Jane', 'John', 'Peter', 'Mary', 'Jane'],
-        'Customer Last Name': ['Smith', 'Doe', 'Smith', 'Jones', 'Brown', 'Doe'],
-        'Customer Email': ['john.smith@example.com', 'jane.doe@example.com', 'john.smith@example.com', 'peter.jones@example.com', 'mary.brown@example.com', 'jane.doe@example.com'],
-        'Order ID': [101, 102, 103, 104, 105, 106],
-        'Product Name': ["TM18304 Men's VEGA Performance Tech Quarter Zip", "QC300 Avalon: 5-in-1 Power Bank", "STYLE# 1578 MESH POLO", "SanMar Ladies Perfect Weight V-Neck Tee. DT5501", "Koozie® Collapsible Can Kooler", "A product with no link"],
-        'Product SKU': ['TM18304', 'QC300', '1578', 'DT5501', '45448', 'XYZ-987'],
-        'Supplier Name': ['SPOKE', 'PCNA', 'S&S Activewear', 'Sanmar', 'Koozie Group', 'Unknown Supplier'],
-        'Quantity': [2, 1, 3, 5, 10, 1],
-        'Price': [55.99, 45.00, 32.50, 12.00, 1.50, 25.00]
-    }
-    df = pd.DataFrame(data)
+    df = pd.DataFrame('order_data.csv')
     return df
 
-# Mapping of supplier names to their URL templates for link generation
-supplier_map = {
-    'SPOKE': 'https://spokeapparel.com/?s={productId}',
-    'Sanmar': 'https://sanmar.com/search?text={productId}',
-    'S&S Activewear': 'https://www.ssactivewear.com/ps/?q={productId}',
-    'PCNA': 'https://www.pcna.com/en-us/Search?SearchTerm={productId}',
-    'Koozie Group': 'https://www.kooziegroup.com/searchai/?query={productId}',
-    # Add other suppliers from your list here...
-}
-
-def generate_link(row):
-    """Generates a product link based on the supplier and SKU."""
-    supplier = row['Supplier Name']
-    sku = row['Product SKU']
-    if pd.isna(supplier):
-        return None
-    url_template = supplier_map.get(supplier)
-    if not url_template:
-        return None
-    if '{productId}' in url_template and not pd.isna(sku):
-        return url_template.format(productId=str(sku))
-    elif '{productId}' not in url_template:
-        return url_template
-    return None
 
 def search_web_for_link(product_name):
     """
@@ -122,6 +87,7 @@ def search_web_for_link(product_name):
     query = product_name.replace(" ", "+")
     return f"https://www.google.com/search?q={query}"
 
+
 # --- MOCK GEMINI API CALL ---
 def get_gemini_response(query, customer_data_str):
     """
@@ -131,7 +97,7 @@ def get_gemini_response(query, customer_data_str):
     # This is a canned response for demonstration.
     # A real implementation would send the query and data to the AI model.
     product_lines = []
-    for line in customer_data_str.strip().split('\n')[1:]: # Skip header
+    for line in customer_data_str.strip().split('\n')[1:]:  # Skip header
         parts = line.split(',')
         if len(parts) > 4:
             product_lines.append(f"- **{parts[4].strip()}** (Qty: {parts[7].strip()})")
@@ -162,16 +128,16 @@ with st.sidebar:
         df = pd.read_csv(uploaded_file)
     else:
         if st.button("Use Sample Data"):
-            df = create_sample_data()
+            df = data()
             st.session_state['df'] = df
 
     if 'df' in st.session_state:
         df = st.session_state['df']
         st.subheader("Filter Customer")
-        
+
         # Create unique lists for dropdowns to avoid duplicates
         customer_emails = df['Customer Email'].unique()
-        
+
         # Filter by email (more reliable)
         selected_email = st.selectbox("Select by Customer Email", options=[""] + list(customer_emails))
 
@@ -190,16 +156,18 @@ if 'df' in st.session_state:
         filtered_df = filtered_df[filtered_df['Customer Email'] == selected_email]
     elif first_name_search or last_name_search:
         if first_name_search:
-            filtered_df = filtered_df[filtered_df['Customer First Name'].str.contains(first_name_search, case=False, na=False)]
+            filtered_df = filtered_df[
+                filtered_df['Customer First Name'].str.contains(first_name_search, case=False, na=False)]
         if last_name_search:
-            filtered_df = filtered_df[filtered_df['Customer Last Name'].str.contains(last_name_search, case=False, na=False)]
+            filtered_df = filtered_df[
+                filtered_df['Customer Last Name'].str.contains(last_name_search, case=False, na=False)]
 
     # Display results only if a filter has been applied and returned results
     if not filtered_df.equals(df) and not filtered_df.empty:
         st.header("Filtered Customer Orders")
-        
+
         # Generate initial links
-        filtered_df['links'] = filtered_df.apply(generate_link, axis=1)
+        #filtered_df['links'] = filtered_df.apply(generate_link, axis=1)
 
         # Find and fill missing links
         for index, row in filtered_df.iterrows():
@@ -207,7 +175,7 @@ if 'df' in st.session_state:
                 product_name = row['Product Name']
                 found_link = search_web_for_link(product_name)
                 filtered_df.loc[index, 'links'] = found_link
-        
+
         # Display the data table with clickable links
         st.markdown("### Customer Order Details")
         st.dataframe(
@@ -223,17 +191,18 @@ if 'df' in st.session_state:
         st.header("💬 Chat with AI")
         st.markdown("Ask a question about the filtered orders above.")
 
-        user_query = st.text_input("Your question (e.g., 'Summarize past orders' or 'Help me re-order the polo shirt')", key="chat_input")
+        user_query = st.text_input("Your question (e.g., 'Summarize past orders' or 'Help me re-order the polo shirt')",
+                                   key="chat_input")
 
         if st.button("Ask AI"):
             if user_query:
                 with st.spinner("🧠 AI is thinking..."):
                     # Convert filtered data to a string for the AI
                     customer_data_for_ai = filtered_df.to_csv(index=False)
-                    
+
                     # Get AI response
                     ai_response = get_gemini_response(user_query, customer_data_for_ai)
-                    
+
                     # Display AI response in a styled container
                     st.markdown("### 💡 AI Summary")
                     st.info(ai_response)
