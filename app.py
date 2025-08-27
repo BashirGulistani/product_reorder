@@ -278,13 +278,16 @@ if prompt:
         st.markdown(prompt)
     st.session_state.messages.append({"role": "user", "content": prompt})
 
-    with st.spinner("🧠 Thinking..."):
+    with st.spinner("Thinking..."):
+        # Try to extract a customer identifier (email/full name) from THIS message
         # Try to extract a customer identifier (email/full name) from THIS message
         email, first_name, last_name = parse_identifier_from_text(prompt)
-
+        
+        ctx = st.session_state.current_context
         response = None
-        # If the user provided an identifier here, (re)build context from scratch
+        
         if any([email, first_name, last_name]):
+            # User gave a new identifier → rebuild context
             filtered = filter_customer(df, email, first_name, last_name)
             if filtered.empty:
                 response = "I couldn’t find a matching customer. Try an email (e.g., john@acme.com) or full name (e.g., John Doe)."
@@ -297,20 +300,18 @@ if prompt:
                 }
                 # Summarize using LLM
                 response = get_gemini_summary(prompt, {"customer": compact["customer"], "orders": compact["orders"]})
-
+        
                 # Show current customer pill
                 cust = compact["customer"] or {}
                 display_name = " ".join([cust.get("first_name",""), cust.get("last_name","")]).strip() or cust.get("email","(no name)")
                 response = f"**Current Customer:** <span class='pill'>{display_name}</span>\n\n" + response
-
+        
         else:
-            # No identifier in this message → treat as a follow-up on existing context
-            ctx = st.session_state.current_context
+            # No identifier → follow-up using existing context
             if not ctx:
-                response = ("Please include an email or full name in your message to start. "
+                response = ("Please include an email or full name in your first message. "
                             "For example: `Show past orders for john@acme.com` or `Show past orders for Jane Doe`.")
             else:
-                # Cheap intent handling for details; otherwise LLM summary within context
                 intent = detect_followup_intent(prompt)
                 orders = ctx["orders"] or []
                 if intent["type"] == "details":
@@ -325,7 +326,7 @@ if prompt:
                     if not orders:
                         response = "There are no orders on record for this customer."
                     else:
-                        o = orders[0]  # assume most recent
+                        o = orders[0]  # most recent
                         if intent["what"] == "tracking":
                             response = "\n".join([format_order_brief(o), "", format_tracking(o)])
                         elif intent["what"] == "prices":
@@ -350,6 +351,10 @@ if prompt:
                         response = "\n".join(lines)
                 else:
                     response = get_gemini_summary(prompt, {"customer": ctx["customer"], "orders": orders})
+
+
+
+    
 
     with st.chat_message("assistant"):
         st.markdown(response, unsafe_allow_html=True)
