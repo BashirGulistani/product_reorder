@@ -248,15 +248,8 @@ def format_shipping(o: dict) -> str:
 
 # --- UI ---
 st.title("🤖 Customer Order Smart Chatbot")
-st.caption("Type an email or full name in your message (e.g., “Show past orders for john@acme.com” or “Show past orders for Jane Doe”). No web search; links shown only if present in your data.")
+st.caption("Type an email or full name in your message (e.g., “Show past orders for john@acme.com” or “Show past orders for Jane Doe”).")
 
-# Show tiny dataset info (optional)
-with st.expander("Dataset info"):
-    st.write(f"Rows: {len(df):,}  •  Columns: {len(df.columns)}")
-    st.write("Key columns used:", [
-        "Order ID","Order Status","Date Ordered","Date Completed","Customer Email",
-        "Customer First Name","Customer Last Name","Product Name","Quantity","links"
-    ])
 
 # Render chat history
 for message in st.session_state.messages:
