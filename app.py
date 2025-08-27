@@ -141,44 +141,73 @@ def format_shipping(o: dict) -> str:
 
 
 # --- Helpers ---
-def extract_customer_info(query: str) -> dict:
+import re
+from typing import Optional, Dict
+
+# Precompile email regex (strict-enough for app use)
+_EMAIL_START_RE = re.compile(
+    r"^\s*([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})\b",
+    re.IGNORECASE
+)
+
+# Matches a leading single-quoted name:  'Steven Henderson' wants to reorder...
+# Captures the inside of the first quote pair.
+_QUOTED_NAME_START_RE = re.compile(r"^\s*'([^']+?)'")
+
+def extract_customer_info(query: str) -> Dict[str, Optional[str]]:
     """
-    Use LLM to extract email / first / last in robust JSON.
-    """
-    prompt = f"""
-You will extract a customer's identifier from the user's query.
+    Deterministic extractor that reads the *beginning* of the query.
+    Supported forms at the start:
+      1) EMAIL            -> e.g., "jane@company.com wants to reorder..."
+      2) 'FIRST LAST'     -> e.g., "'Steven Henderson' wants to reorder..."
 
-Return STRICT JSON with keys exactly:
-{{
-  "email": string or null,
-  "first_name": string or null,
-  "last_name": string or null
-}}
-
-Rules:
-- If a full name is present (e.g., "John Q. Doe"), split into first_name="John" and last_name="Doe" (ignore middle).
-- If only one token like "John" appears, set first_name="John", last_name=null.
-- If an email appears, set email to the lowercase email.
-- If nothing identifiable, return all nulls.
-
-Query: {query}
-"""
-    try:
-        resp = model.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=[prompt],
-            config={"response_mime_type": "application/json"}
-        )
-        data = json.loads(resp.text)
-        # Safety net keys
-        return {
-            "email": (data.get("email") or None),
-            "first_name": (data.get("first_name") or None),
-            "last_name": (data.get("last_name") or None),
+    Returns:
+        {
+          "email": email or None,
+          "first_name": first name or None,
+          "last_name": last name or None
         }
-    except Exception as e:
-        st.warning(f"Extractor fallback (couldn't parse JSON): {e}")
+    """
+    if not isinstance(query, str):
         return {"email": None, "first_name": None, "last_name": None}
+
+    s = query.strip()
+
+    # 1) Leading email wins
+    m_email = _EMAIL_START_RE.match(s)
+    if m_email:
+        return {"email": m_email.group(1).lower(), "first_name": None, "last_name": None}
+
+    # 2) Leading single-quoted full name
+    m_name = _QUOTED_NAME_START_RE.match(s)
+    if m_name:
+        name = m_name.group(1).strip()
+
+        # Optional: handle "Last, First" if user types it
+        if "," in name:
+            last, first, *rest = [p.strip() for p in name.split(",")]
+            # Ignore middle names if present
+            return {"email": None, "first_name": first or None, "last_name": last or None}
+
+        # Default: "First [Middle ...] Last"
+        parts = [p for p in name.split() if p]
+        if len(parts) >= 2:
+            first = parts[0]
+            last = parts[-1]
+            return {"email": None, "first_name": first, "last_name": last}
+        elif len(parts) == 1:
+            # In case someone provides only one token in quotes
+            return {"email": None, "first_name": parts[0], "last_name": None}
+
+    # If nothing valid at the start, return nulls
+    return {"email": None, "first_name": None, "last_name": None}
+
+
+
+
+
+
+
 
 def filter_customer(df: pd.DataFrame, info: dict) -> pd.DataFrame:
     out = df.copy()
