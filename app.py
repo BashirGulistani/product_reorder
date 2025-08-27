@@ -101,7 +101,7 @@ def extract_customer_info(query):
     try:
         resp = model.models.generate_content(
             model="gemini-2.5-flash",
-            contents=[system_prompt, user_prompt],
+            contents=[prompt, query],
             config={"response_mime_type": "application/json"}
         )
         
@@ -132,8 +132,13 @@ def get_gemini_response(query, customer_data_str):
     """
     
     try:
-        response = model.generate_content([system_prompt, user_prompt])
-        return response.text
+        resp = model.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=[system_prompt, user_prompt],
+            config={"response_mime_type": "application/json"}
+        )
+        
+        return resp.text
     except Exception as e:
         st.error(f"Error generating response: {e}")
         return "Sorry, I couldn't generate a response at this time."
