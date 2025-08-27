@@ -197,7 +197,6 @@ if prompt := st.chat_input("Ask about a customer's orders (e.g., 'Show past orde
             # Fill missing links
             for index, row in filtered_df.iterrows():
                 if pd.isna(row['links']):
-                    product_name = row['Product Name'].strip() 
                     product_name = str(row['Product Name']) if not pd.isna(row['Product Name']) else "Unknown Product"
                     product_name = product_name.strip()
                     found_link = search_web_for_link(product_name)
