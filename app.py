@@ -13,7 +13,6 @@ st.set_page_config(
 )
 
 try:
-    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
     model = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
 except Exception:
     st.error("Could not initialize Gemini client. Please check GEMINI_API_KEY in Streamlit secrets.")
@@ -115,7 +114,7 @@ def get_gemini_response(query, customer_data_str):
     """
     
     try:
-        resp = genai_client.models.generate_content(
+        resp = model.models.generate_content(
             model="gemini-2.5-flash",
             contents=[system_prompt, user_prompt],
             config={"response_mime_type": "application/json"}
