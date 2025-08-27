@@ -288,7 +288,7 @@ LENGTH & STYLE:
 
 
 # --- UI ---
-st.title("Customer Order Smart Chatbot")
+st.title("Customer Order Chatbot")
 st.caption("Ask about a customer's orders by name or email. The AI will summarize the essentials and include product links when available.")
 
 
