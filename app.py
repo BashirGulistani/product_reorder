@@ -1,8 +1,8 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import io
 import requests  # Used to simulate web search
+import google.generativeai as genai
 
 # --- Page Configuration ---
 st.set_page_config(
@@ -11,6 +11,13 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+try:
+    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+    model = genai.GenerativeModel("gemini-1.5-flash")
+except Exception:
+    st.error("Could not initialize Gemini client. Please check GEMINI_API_KEY in Streamlit secrets.")
+    st.stop()
 
 # --- Professional Styling (CSS) ---
 st.markdown("""
@@ -70,8 +77,7 @@ st.markdown("""
 # --- Data Generation and Helper Functions ---
 
 @st.cache_data
-def data():
-    """Creates a sample DataFrame to be used if no file is uploaded."""
+def load_sample_data():
     df = pd.DataFrame('order_data.csv')
     return df
 
@@ -79,45 +85,46 @@ def data():
 def search_web_for_link(product_name):
     """
     Simulates a web search to find a product link.
-    In a real application, this would use an API like Google Search.
+    In a real application, this could use an API like Google Custom Search.
+    For demonstration, we'll use a generic Google search link.
     """
     st.toast(f"Searching online for: '{product_name}'...")
-    # This is a mock search. Replace with a real search API call.
-    # For demonstration, we'll use a generic Google search link.
+    # Mock search: replace with real API if available
     query = product_name.replace(" ", "+")
-    return f"https://www.google.com/search?q={query}"
+    return f"https://www.google.com/search?q={query}&tbm=shop"
 
 
-# --- MOCK GEMINI API CALL ---
+# --- GEMINI API CALL ---
 def get_gemini_response(query, customer_data_str):
+    system_prompt = """
+    You are a smart assistant specializing in customer order management.
+    Your tasks:
+    - Clean and standardize product names (e.g., remove extra spaces, fix typos).
+    - Summarize past orders intelligently.
+    - If the query is about re-ordering, suggest based on past products.
+    - Include all relevant details: order dates, quantities, prices, and product links.
+    - Provide a clear, concise summary.
+    - Show all related information about the customer's orders.
     """
-    Mocks a call to the Gemini API.
-    In a real app, you would use the actual google.generativeai library.
+    
+    user_prompt = f"""
+    Customer order data (CSV format):
+    {customer_data_str}
+    
+    User query: {query}
     """
-    # This is a canned response for demonstration.
-    # A real implementation would send the query and data to the AI model.
-    product_lines = []
-    for line in customer_data_str.strip().split('\n')[1:]:  # Skip header
-        parts = line.split(',')
-        if len(parts) > 4:
-            product_lines.append(f"- **{parts[4].strip()}** (Qty: {parts[7].strip()})")
-
-    products_summary = "\n".join(product_lines)
-
-    response = f"""
-    Based on the customer's order history, here is a summary:
-
-    The customer has placed **{len(product_lines)}** order(s) for the following items:
-    {products_summary}
-
-    If they wish to re-order, you can use the links provided in the data table below to find the products.
-    """
-    return response
+    
+    try:
+        response = model.generate_content([system_prompt, user_prompt])
+        return response.text
+    except Exception as e:
+        st.error(f"Error generating response: {e}")
+        return "Sorry, I couldn't generate a response at this time."
 
 
 # --- Main Application UI ---
 st.title("🤖 Customer Order Smart Chatbot")
-st.markdown("Upload your order data, filter by customer, and ask the AI for an order summary.")
+st.markdown("Filter by customer details and chat with AI for intelligent order summaries and re-order suggestions.")
 
 # --- Data Upload and Sidebar ---
 with st.sidebar:
@@ -126,9 +133,10 @@ with st.sidebar:
 
     if uploaded_file is not None:
         df = pd.read_csv(uploaded_file)
+        st.session_state['df'] = df
     else:
         if st.button("Use Sample Data"):
-            df = data()
+            df = load_sample_data()
             st.session_state['df'] = df
 
     if 'df' in st.session_state:
@@ -136,14 +144,14 @@ with st.sidebar:
         st.subheader("Filter Customer")
 
         # Create unique lists for dropdowns to avoid duplicates
-        customer_emails = df['Customer Email'].unique()
+        customer_emails = sorted(df['Customer Email'].unique())
 
         # Filter by email (more reliable)
         selected_email = st.selectbox("Select by Customer Email", options=[""] + list(customer_emails))
 
-        # Optional: Filter by name
+        # Optional: Filter by name (can combine with email)
         st.markdown("---")
-        st.write("Or filter by name:")
+        st.write("Additional name filters (applied on top of email):")
         first_name_search = st.text_input("Customer First Name (contains)")
         last_name_search = st.text_input("Customer Last Name (contains)")
 
@@ -151,30 +159,26 @@ with st.sidebar:
 if 'df' in st.session_state:
     filtered_df = df.copy()
 
-    # Apply filters
+    # Apply filters sequentially
     if selected_email:
         filtered_df = filtered_df[filtered_df['Customer Email'] == selected_email]
-    elif first_name_search or last_name_search:
-        if first_name_search:
-            filtered_df = filtered_df[
-                filtered_df['Customer First Name'].str.contains(first_name_search, case=False, na=False)]
-        if last_name_search:
-            filtered_df = filtered_df[
-                filtered_df['Customer Last Name'].str.contains(last_name_search, case=False, na=False)]
+    if first_name_search:
+        filtered_df = filtered_df[
+            filtered_df['Customer First Name'].str.contains(first_name_search, case=False, na=False)]
+    if last_name_search:
+        filtered_df = filtered_df[
+            filtered_df['Customer Last Name'].str.contains(last_name_search, case=False, na=False)]
 
     # Display results only if a filter has been applied and returned results
     if not filtered_df.equals(df) and not filtered_df.empty:
         st.header("Filtered Customer Orders")
-
-        # Generate initial links
-        #filtered_df['links'] = filtered_df.apply(generate_link, axis=1)
 
         # Find and fill missing links
         for index, row in filtered_df.iterrows():
             if pd.isna(row['links']):
                 product_name = row['Product Name']
                 found_link = search_web_for_link(product_name)
-                filtered_df.loc[index, 'links'] = found_link
+                filtered_df.at[index, 'links'] = found_link
 
         # Display the data table with clickable links
         st.markdown("### Customer Order Details")
@@ -183,15 +187,16 @@ if 'df' in st.session_state:
             column_config={
                 "links": st.column_config.LinkColumn("Product Link", display_text="🔗 View Product")
             },
-            hide_index=True
+            hide_index=True,
+            use_container_width=True
         )
 
         # --- Chatbot Section ---
         st.markdown("---")
         st.header("💬 Chat with AI")
-        st.markdown("Ask a question about the filtered orders above.")
+        st.markdown("Ask a question about the filtered orders (e.g., 'Summarize past orders' or 'Help me re-order the polo shirt').")
 
-        user_query = st.text_input("Your question (e.g., 'Summarize past orders' or 'Help me re-order the polo shirt')",
+        user_query = st.text_input("Your question",
                                    key="chat_input")
 
         if st.button("Ask AI"):
@@ -208,10 +213,10 @@ if 'df' in st.session_state:
                     st.info(ai_response)
             else:
                 st.warning("Please enter a question for the AI.")
-    elif not filtered_df.empty:
-        st.info("👈 Please use the sidebar to filter and find a customer.")
-    else:
+    elif filtered_df.empty:
         st.warning("No customers found with the specified filters.")
+    else:
+        st.info("👈 Please use the sidebar to filter and find a customer.")
 
 else:
     st.info("Please upload a CSV file or use the sample data to begin.")
