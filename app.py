@@ -104,8 +104,9 @@ def extract_customer_info(query):
             contents=[prompt, query],
             config={"response_mime_type": "application/json"}
         )
+        data = json.loads(resp.text)
         
-        return resp.text
+        return data
     except Exception as e:
         st.error(f"Error extracting customer info: {e}")
         return {"email": None, "first_name": None, "last_name": None}
