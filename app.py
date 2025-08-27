@@ -346,7 +346,7 @@ for message in st.session_state.messages:
         st.markdown(message["content"])
 
 # Chat input
-prompt = st.chat_input("e.g., “Show past orders for John Doe” or “john@example.com wants to reorder hoodies”")
+prompt = st.chat_input("e.g., “'John Doe' Show past orders” or “john@example.com wants to reorder hoodies”")
 if prompt:
     with st.chat_message("user"):
         st.markdown(prompt)
