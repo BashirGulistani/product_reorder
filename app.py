@@ -123,15 +123,18 @@ def extract_customer_info(query: str) -> Dict[str, Optional[str]]:
 
 
 
-def filter_customer(df: pd.DataFrame, info: dict) -> pd.DataFrame:
+def filter_customer(df: pd.DataFrame, email: str | None, first_name: str | None, last_name: str | None) -> pd.DataFrame:
     out = df.copy()
-    if info.get("email"):
-        out = out[out["Customer Email"].str.lower() == info["email"].lower()]
-    if info.get("first_name"):
-        out = out[out["Customer First Name"].str.contains(info["first_name"], case=False, na=False)]
-    if info.get("last_name"):
-        out = out[out["Customer Last Name"].str.contains(info["last_name"], case=False, na=False)]
+    if email:
+        # exact match on email (case-insensitive)
+        out = out[out["Customer Email"].str.lower() == email.strip().lower()]
+    else:
+        if first_name:
+            out = out[out["Customer First Name"].str.contains(first_name.strip(), case=False, na=False)]
+        if last_name:
+            out = out[out["Customer Last Name"].str.contains(last_name.strip(), case=False, na=False)]
     return out
+
 
 def compact_orders_for_llm(df: pd.DataFrame) -> dict:
     """
