@@ -14,7 +14,7 @@ st.set_page_config(
 
 try:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-    model = genai.GenerativeModel("gemini-1.5-flash")
+    model = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
 except Exception:
     st.error("Could not initialize Gemini client. Please check GEMINI_API_KEY in Streamlit secrets.")
     st.stop()
@@ -78,7 +78,7 @@ st.markdown("""
 
 @st.cache_data
 def load_sample_data():
-    df = pd.DataFrame('order_data.csv')
+    df = pd.read_csv('order_data.csv')
     return df
 
 
@@ -115,8 +115,12 @@ def get_gemini_response(query, customer_data_str):
     """
     
     try:
-        response = model.generate_content([system_prompt, user_prompt])
-        return response.text
+        resp = genai_client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=[system_prompt, user_prompt],
+            config={"response_mime_type": "application/json"}
+        )
+        return resp.text
     except Exception as e:
         st.error(f"Error generating response: {e}")
         return "Sorry, I couldn't generate a response at this time."
