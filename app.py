@@ -62,53 +62,45 @@ EMAIL_RE = re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.I)
 
 def parse_identifier_from_text(msg: str) -> tuple[str|None, str|None, str|None]:
     """
-    From a free-form chat message, try to extract:
-    - email (wins if present), or
-    - full name → first/last (best-effort)
-    Heuristics:
-      1) email via regex
-      2) if message contains quoted name "Jane Doe" use that
-      3) look for name after 'for ' / 'for customer ' / 'for client ' (two words)
-      4) fallback: two capitalized words anywhere
-    Returns (email, first_name, last_name)
+    Returns (email, first_name, last_name).
+    Only detects identifiers when:
+      1) An email is present, OR
+      2) A quoted full name appears: "Jane Doe", OR
+      3) A name appears after 'for', 'for customer', or 'for client', OR
+      4) A name appears after 'customer:' or 'client:'.
+    No generic capitalization guesses (prevents false positives on follow-ups).
     """
     if not msg:
         return None, None, None
 
-    # 1) Email wins
-    m = EMAIL_RE.search(msg)
+    s = " ".join(msg.strip().split())
+
+    # 1) Email
+    m = EMAIL_RE.search(s)
     if m:
         return m.group(0).lower(), None, None
-
-    # normalize spaces
-    s = " ".join(msg.strip().split())
 
     # 2) Quoted full name
     mq = re.search(r'"([^"]+)"', s)
     if mq:
         name = mq.group(1).strip()
         parts = [p for p in name.split() if p]
-        if len(parts) >= 2:
-            return None, parts[0], parts[-1]
-        elif len(parts) == 1:
-            return None, parts[0], None
+        if len(parts) >= 2: return None, parts[0], parts[-1]
+        if len(parts) == 1: return None, parts[0], None
 
-    # 3) After keywords like "for", "for customer", "for client"
+    # 3) After 'for' / 'for customer' / 'for client' (two tokens)
     mk = re.search(r"\bfor(?:\s+(?:customer|client))?\s+([A-Za-z][A-Za-z'\-]+)\s+([A-Za-z][A-Za-z'\-]+)\b", s, re.I)
     if mk:
         return None, mk.group(1), mk.group(2)
 
-    # 4) Any two capitalized words next to each other
-    mc = re.search(r"\b([A-Z][a-zA-Z'\-]+)\s+([A-Z][a-zA-Z'\-]+)\b", s)
-    if mc:
-        return None, mc.group(1), mc.group(2)
+    # 4) After 'customer:' or 'client:' (two tokens)
+    mt = re.search(r"\b(?:customer|client)\s*:\s*([A-Za-z][A-Za-z'\-]+)\s+([A-Za-z][A-Za-z'\-]+)\b", s, re.I)
+    if mt:
+        return None, mt.group(1), mt.group(2)
 
-    # 5) Single token (treat as first name partial)
-    ms = re.search(r"\b([A-Za-z][A-Za-z'\-]+)\b", s)
-    if ms:
-        return None, ms.group(1), None
-
+    # No strong identifier
     return None, None, None
+
 
 def filter_customer(df: pd.DataFrame, email: str | None, first_name: str | None, last_name: str | None) -> pd.DataFrame:
     out = df.copy()
@@ -271,91 +263,93 @@ for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
+
+
+
 # Chat input
-prompt = st.chat_input("e.g., “Show past orders for john@acme.com” or “Show tracking for Jane Doe’s last order”")
+prompt = st.chat_input("Ask about orders…")
 if prompt:
     with st.chat_message("user"):
         st.markdown(prompt)
     st.session_state.messages.append({"role": "user", "content": prompt})
 
-    with st.spinner("Thinking..."):
-        # Try to extract a customer identifier (email/full name) from THIS message
-        # Try to extract a customer identifier (email/full name) from THIS message
+    with st.spinner("🧠 Thinking..."):
+        ctx = st.session_state.get("current_context")
+
+        # --- 1) FOLLOW-UP PATH (when we already have a customer in context)
+        # Detect a "strong identifier" first (email or name after 'for' or quoted).
         email, first_name, last_name = parse_identifier_from_text(prompt)
-        
-        ctx = st.session_state.current_context
-        response = None
-        
-        if any([email, first_name, last_name]):
-            # User gave a new identifier → rebuild context
-            filtered = filter_customer(df, email, first_name, last_name)
-            if filtered.empty:
-                response = "I couldn’t find a matching customer. Try an email (e.g., john@acme.com) or full name (e.g., John Doe)."
-            else:
-                compact = compact_orders_for_llm(filtered)
-                st.session_state.current_context = {
-                    "customer": compact["customer"],
-                    "orders": compact["orders"],
-                    "df": filtered.copy()
-                }
-                # Summarize using LLM
-                response = get_gemini_summary(prompt, {"customer": compact["customer"], "orders": compact["orders"]})
-        
-                # Show current customer pill
-                cust = compact["customer"] or {}
-                display_name = " ".join([cust.get("first_name",""), cust.get("last_name","")]).strip() or cust.get("email","(no name)")
-                response = f"**Current Customer:** <span class='pill'>{display_name}</span>\n\n" + response
-        
-        else:
-            # No identifier → follow-up using existing context
-            if not ctx:
-                response = ("Please include an email or full name in your first message. "
-                            "For example: `Show past orders for john@acme.com` or `Show past orders for Jane Doe`.")
-            else:
-                intent = detect_followup_intent(prompt)
-                orders = ctx["orders"] or []
-                if intent["type"] == "details":
-                    oid = intent["order_id"]
-                    match = next((o for o in orders if str(o.get("order_id","")).lower() == oid.lower()), None)
-                    if match:
-                        parts = [format_order_brief(match), "", format_items(match), "", format_shipping(match), "", format_tracking(match)]
-                        response = "\n".join([p for p in parts if p])
-                    else:
-                        response = f"I couldn’t find order **{oid}** for this customer."
-                elif intent["type"] == "show":
-                    if not orders:
-                        response = "There are no orders on record for this customer."
-                    else:
-                        o = orders[0]  # most recent
-                        if intent["what"] == "tracking":
-                            response = "\n".join([format_order_brief(o), "", format_tracking(o)])
-                        elif intent["what"] == "prices":
-                            response = format_order_brief(o)
-                        elif intent["what"] == "items":
-                            response = "\n".join([format_order_brief(o), "", format_items(o)])
-                        elif intent["what"] == "shipping":
-                            response = "\n".join([format_order_brief(o), "", format_shipping(o)])
-                        else:
-                            response = get_gemini_summary(prompt, {"customer": ctx["customer"], "orders": orders})
-                elif intent["type"] == "reorder":
-                    if not orders:
-                        response = "No past items found to reorder."
-                    else:
-                        o = orders[0]
-                        lines = ["Here’s a quick reorder from the most recent order:"]
-                        for it in (o.get("items") or []):
-                            line = f"- {it.get('product_name','(Unnamed)')} x{it.get('quantity','')}"
-                            if it.get("link"): line += f" — [link]({it['link']})"
-                            lines.append(line)
-                        lines.append("\nIf you want to change quantities or pick a different order, let me know.")
-                        response = "\n".join(lines)
+        has_strong_identifier = any([email, first_name, last_name])
+
+        if ctx and not has_strong_identifier:
+            # Treat as follow-up using existing context
+            intent = detect_followup_intent(prompt)
+            orders = ctx.get("orders", [])
+
+            if intent["type"] == "details":
+                oid = intent["order_id"]
+                match = next((o for o in orders if str(o.get("order_id","")).lower() == oid.lower()), None)
+                if match:
+                    parts = [format_order_brief(match), "", format_items(match), "", format_shipping(match), "", format_tracking(match)]
+                    response = "\n".join([p for p in parts if p])
                 else:
-                    response = get_gemini_summary(prompt, {"customer": ctx["customer"], "orders": orders})
+                    response = f"I couldn’t find order **{oid}** for this customer."
+            elif intent["type"] == "show":
+                if not orders:
+                    response = "There are no orders on record for this customer."
+                else:
+                    o = orders[0]
+                    if intent["what"] == "tracking":
+                        response = "\n".join([format_order_brief(o), "", format_tracking(o)])
+                    elif intent["what"] == "prices":
+                        response = format_order_brief(o)
+                    elif intent["what"] == "items":
+                        response = "\n".join([format_order_brief(o), "", format_items(o)])
+                    elif intent["what"] == "shipping":
+                        response = "\n".join([format_order_brief(o), "", format_shipping(o)])
+                    else:
+                        response = get_gemini_summary(prompt, {"customer": ctx["customer"], "orders": orders})
+            elif intent["type"] == "reorder":
+                if not orders:
+                    response = "No past items found to reorder."
+                else:
+                    o = orders[0]
+                    lines = ["Here’s a quick reorder from the most recent order:"]
+                    for it in (o.get("items") or []):
+                        line = f"- {it.get('product_name','(Unnamed)')} x{it.get('quantity','')}"
+                        if it.get("link"): line += f" — [link]({it['link']})"
+                        lines.append(line)
+                    lines.append("\nIf you want to change quantities or pick a different order, let me know.")
+                    response = "\n".join(lines)
+            else:
+                # Unknown follow-up → concise LLM summary within current context
+                response = get_gemini_summary(prompt, {"customer": ctx["customer"], "orders": orders})
 
-
-
-    
+        else:
+            # --- 2) (RE)SELECT CUSTOMER PATH (email or full name present)
+            if not has_strong_identifier:
+                # No context + no identifier → ask for one
+                if not ctx:
+                    response = ("Please include an email or full name to start. "
+                                "e.g., `Show past orders for john@acme.com` or `Show past orders for Jane Doe`.")
+                else:
+                    # We *do* have context; treat as follow-up (safety net)
+                    response = get_gemini_summary(prompt, {"customer": ctx["customer"], "orders": ctx["orders"]})
+            else:
+                filtered = filter_customer(df, email, first_name, last_name)
+                if filtered.empty:
+                    response = "I couldn’t find a matching customer. Try an email (e.g., john@acme.com) or full name (e.g., John Doe)."
+                else:
+                    compact = compact_orders_for_llm(filtered)
+                    st.session_state.current_context = {"customer": compact["customer"], "orders": compact["orders"], "df": filtered.copy()}
+                    # Summarize using LLM
+                    response = get_gemini_summary(prompt, {"customer": compact["customer"], "orders": compact["orders"]})
+                    # Add active customer badge
+                    cust = compact["customer"] or {}
+                    display_name = " ".join([cust.get("first_name",""), cust.get("last_name","")]).strip() or cust.get("email","(no name)")
+                    response = f"**Current Customer:** <span class='pill'>{display_name}</span>\n\n" + response
 
     with st.chat_message("assistant"):
         st.markdown(response, unsafe_allow_html=True)
     st.session_state.messages.append({"role": "assistant", "content": response})
+
