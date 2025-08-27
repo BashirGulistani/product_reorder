@@ -88,55 +88,33 @@ _EMAIL_START_RE = re.compile(
 
 # Matches a leading single-quoted name:  'Steven Henderson' wants to reorder...
 # Captures the inside of the first quote pair.
+import re
+from typing import Optional, Dict
+
+_EMAIL_START_RE = re.compile(r"^\s*([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})\b", re.I)
 _QUOTED_NAME_START_RE = re.compile(r"^\s*'([^']+?)'")
 
 def extract_customer_info(query: str) -> Dict[str, Optional[str]]:
-    """
-    Deterministic extractor that reads the *beginning* of the query.
-    Supported forms at the start:
-      1) EMAIL            -> e.g., "jane@company.com wants to reorder..."
-      2) 'FIRST LAST'     -> e.g., "'Steven Henderson' wants to reorder..."
-
-    Returns:
-        {
-          "email": email or None,
-          "first_name": first name or None,
-          "last_name": last name or None
-        }
-    """
-    if not isinstance(query, str):
-        return {"email": None, "first_name": None, "last_name": None}
-
-    s = query.strip()
-
-    # 1) Leading email wins
-    m_email = _EMAIL_START_RE.match(s)
+    # Leading email wins
+    m_email = _EMAIL_START_RE.match(query.strip())
     if m_email:
         return {"email": m_email.group(1).lower(), "first_name": None, "last_name": None}
 
-    # 2) Leading single-quoted full name
-    m_name = _QUOTED_NAME_START_RE.match(s)
+    # Leading 'Full Name'
+    m_name = _QUOTED_NAME_START_RE.match(query.strip())
     if m_name:
         name = m_name.group(1).strip()
-
-        # Optional: handle "Last, First" if user types it
-        if "," in name:
-            last, first, *rest = [p.strip() for p in name.split(",")]
-            # Ignore middle names if present
+        if "," in name:  # "Last, First"
+            last, first, *_ = [p.strip() for p in name.split(",")]
             return {"email": None, "first_name": first or None, "last_name": last or None}
-
-        # Default: "First [Middle ...] Last"
         parts = [p for p in name.split() if p]
         if len(parts) >= 2:
-            first = parts[0]
-            last = parts[-1]
-            return {"email": None, "first_name": first, "last_name": last}
+            return {"email": None, "first_name": parts[0], "last_name": parts[-1]}
         elif len(parts) == 1:
-            # In case someone provides only one token in quotes
             return {"email": None, "first_name": parts[0], "last_name": None}
 
-    # If nothing valid at the start, return nulls
     return {"email": None, "first_name": None, "last_name": None}
+
 
 
 
