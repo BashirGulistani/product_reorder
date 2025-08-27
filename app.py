@@ -19,8 +19,13 @@ except Exception:
     st.stop()
 
 # --- Professional Styling (CSS) ---
+# --- Professional Styling (CSS) ---
 st.markdown("""
 <style>
+    /* Global text color */
+    * {
+        color: black !important;
+    }
     /* Main app background */
     .stApp {
         background-color: #f0f2f6;
@@ -52,18 +57,14 @@ st.markdown("""
         font-size: 1em;
         font-weight: 500;
         background-color: #1a73e8;
-        color: white;
+        color: white !important; /* Keep button text white for contrast */
         cursor: pointer;
         transition: border-color 0.25s;
     }
     .stButton>button:hover {
         border-color: #1a73e8;
         background-color: #ffffff;
-        color: #1a73e8;
-    }
-    /* Title styling */
-    h1 {
-        color: #1a237e;
+        color: black !important; /* Ensure button text is black on hover */
     }
     /* Chat message styling */
     .st-chat-message {
