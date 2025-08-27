@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import requests  # Used to simulate web search
-import google.generativeai as genai
+from google import genai
 
 # --- Page Configuration ---
 st.set_page_config(
