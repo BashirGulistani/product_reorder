@@ -136,22 +136,37 @@ def filter_customer(df: pd.DataFrame, email: str | None, first_name: str | None,
     return out
 
 
-def compact_orders_for_llm(df: pd.DataFrame) -> dict:
-    """
-    Build a concise JSON snapshot. No raw CSV dump.
-    Group by Order ID and summarize key fields and line items (with links if present).
-    """
-    # Columns we might use (handle missing gracefully)
-    def g(col, row):
-        return (row.get(col) if isinstance(row, dict) else row[col]) if col in df.columns else None
+import re
+from decimal import Decimal, InvalidOperation
 
-    # Build per-order structure
-    orders = []
-    if df.empty:
+def _to_decimal(x):
+    if x is None: 
+        return None
+    s = str(x)
+    # keep digits, dots, and minus sign (strip $ and commas etc.)
+    s = re.sub(r"[^0-9\.\-]", "", s)
+    try:
+        return Decimal(s) if s else None
+    except InvalidOperation:
+        return None
+
+def _to_int(x):
+    try:
+        return int(str(x).strip())
+    except Exception:
+        return None
+
+def compact_orders_for_llm(filtered: pd.DataFrame) -> dict:
+    """
+    Build a compact, LLM-friendly JSON with brand and line_total per item.
+    Brand preference: Supplier Name -> Manufacturer Name (fallback).
+    line_total = quantity * unit_price (precomputed).
+    """
+    if filtered.empty:
         return {"customer": None, "orders": []}
 
-    # Use first non-null customer-level fields
-    first = df.iloc[0].fillna("")
+    f = filtered.fillna("")
+    first = f.iloc[0]
     customer = {
         "first_name": first.get("Customer First Name", ""),
         "last_name": first.get("Customer Last Name", ""),
@@ -160,19 +175,28 @@ def compact_orders_for_llm(df: pd.DataFrame) -> dict:
         "company": first.get("Company Name", ""),
     }
 
-    for order_id, group in df.groupby("Order ID", dropna=False):
-        g0 = group.iloc[0].fillna("")
+    orders = []
+    for order_id, group in f.groupby("Order ID", dropna=False):
+        g0 = group.iloc[0]
         items = []
-        for _, r in group.fillna("").iterrows():
+        for _, r in group.iterrows():
+            unit_price = _to_decimal(r.get("Item Product Unit Price", ""))
+            qty = _to_int(r.get("Quantity", ""))
+            line_total = (unit_price * qty) if (unit_price is not None and qty is not None) else None
+
+            brand = r.get("Supplier Name", "") or r.get("Manufacturer Name", "")
+            link = r.get("links", "") or None
             items.append({
                 "product_name": r.get("Product Name", ""),
+                "brand": brand or "",
                 "sku": r.get("Product SKU", ""),
                 "manufacturer": r.get("Manufacturer Name", ""),
                 "color": r.get("Product Color", ""),
                 "size": r.get("Product Size", ""),
-                "quantity": r.get("Quantity", ""),
-                "unit_price": r.get("Item Product Unit Price", ""),
-                "link": r.get("links", "") or None  # keep None if blank
+                "quantity": qty if qty is not None else r.get("Quantity", ""),
+                "unit_price": str(unit_price) if unit_price is not None else r.get("Item Product Unit Price", ""),
+                "line_total": str(line_total) if line_total is not None else None,
+                "link": link
             })
         orders.append({
             "order_id": order_id,
@@ -212,21 +236,36 @@ def get_gemini_summary(user_query: str, compact_json: dict) -> str:
     system_prompt = """
 You are a precise assistant for customer order inquiries.
 
-You will receive:
-- `data`: a compact JSON of a SINGLE customer's orders (already filtered by the app).
+INPUTS YOU GET:
+- `data`: compact JSON for a SINGLE customer's orders (already filtered).
 - `query`: the user's request (may be a follow-up like "details for order 1074026", "show tracking", "reorder", etc.).
 
-Your job:
-- Work ONLY with the provided JSON. Do NOT search the web. Do NOT fabricate links.
-- Understand follow-ups naturally (order IDs, tracking, items, totals, shipping, reorder suggestions).
-- Prefer the most recent order when the user does not specify.
-- If an order id is referenced, focus on that order.
-- Summaries should be concise (≈150 words), using Markdown bullets when useful.
-- If `links` exist on items, include them inline. If not, omit.
-- End with: "If you want more details (like prices, shipping, or tracking), please let me know."
+STRICT RULES:
+- Work ONLY with `data`. Do NOT search the web. Do NOT fabricate links.
+- If the user references a specific order id, focus on that order; otherwise prefer the most recent order (by Date Ordered if available).
+- When listing items for any order, the FIRST thing shown must be, per item and in this exact order:
+  1) Link (if present), shown by making the product name a markdown link;
+  2) Product Name;
+  3) Product Brand (use `item.brand`; if missing, omit "Brand:");
+  4) Quantity;
+  5) Line Total (use `item.line_total` if present; otherwise omit).
+
+RECOMMENDED ITEM LINE FORMAT (Markdown list):
+- [Product Name](link) — Brand: BRAND • Qty: Q • Line total: $T
+- If `link` is null, do not create a link; just show: Product Name — Brand: BRAND • Qty: Q • Line total: $T
+- If BRAND or Line total are missing, omit those segments but keep the rest.
+
+STRUCTURE YOUR ANSWER:
+1) A short order header per relevant order (e.g., **Order 12345** — Status; Date Ordered).
+2) Then an **Items** section that lists each item using the format above (one bullet per item).
+3) Then any requested extras (tracking, totals, shipping) as concise bullets.
+4) End with: "If you want more details (like prices, shipping, or tracking), please let me know."
+
+LENGTH & STYLE:
+- Be concise (≈150 words when possible). Use Markdown bullets and bold where helpful. No raw JSON or tables.
 """
 
-    # Sort orders by Date Ordered desc to help the model pick "most recent"
+    # Helpful sort: most-recent-first
     try:
         orders = compact_json.get("orders", [])
         def safe_key(o): return o.get("date_ordered") or ""
@@ -245,6 +284,7 @@ Your job:
     except Exception as e:
         st.error(f"Error generating AI response: {e}")
         return "Sorry, I couldn't generate a response right now."
+
 
 
 # --- UI ---
