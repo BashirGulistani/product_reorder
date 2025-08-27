@@ -6,7 +6,7 @@ from google import genai
 
 # --- Page Configuration ---
 st.set_page_config(
-    page_title="Customer Order Smart Chatbot",
+    page_title="Customer Order Chatbot",
     page_icon="🤖",
     layout="wide",
 )
@@ -67,75 +67,11 @@ if "current_context" not in st.session_state:
 
 import re
 
-def detect_followup_intent(msg: str) -> dict:
-    """
-    Returns one of:
-      {"type": "details", "order_id": "123"}  # drill into a specific order
-      {"type": "show", "what": "tracking|prices|items|shipping"}  # generic details
-      {"type": "reorder"}  # reorder intent
-      {"type": "switch"}  # indicates new customer present
-      {"type": "unknown"}
-    """
-    m = re.search(r"\border\s*#?\s*([A-Za-z0-9\-]+)\b", msg, re.I)
-    if m:
-        return {"type": "details", "order_id": m.group(1)}
-
-    if re.search(r"\b(track|tracking|status)\b", msg, re.I):
-        return {"type": "show", "what": "tracking"}
-    if re.search(r"\b(price|total|subtotal|tax|discount)\b", msg, re.I):
-        return {"type": "show", "what": "prices"}
-    if re.search(r"\b(items?|line items?|products?)\b", msg, re.I):
-        return {"type": "show", "what": "items"}
-    if re.search(r"\b(ship|address|delivery)\b", msg, re.I):
-        return {"type": "show", "what": "shipping"}
-    if re.search(r"\bre-?order|order again|same as last time\b", msg, re.I):
-        return {"type": "reorder"}
-
-    return {"type": "unknown"}
 
 
 from textwrap import dedent
 
-def format_order_brief(o: dict) -> str:
-    lines = []
-    lines.append(f"**Order {o.get('order_id','')}** — {o.get('status','')}")
-    if o.get("date_ordered"):
-        lines.append(f"- Date Ordered: {o['date_ordered']}")
-    if o.get("date_completed"):
-        lines.append(f"- Date Completed: {o['date_completed']}")
-    t = o.get("totals") or {}
-    if any(t.values()):
-        lines.append(f"- Totals: Subtotal {t.get('subtotal','')}, Delivery {t.get('delivery_total','')}, Tax {t.get('tax','')}, Discount {t.get('discount','')}, **Order Total {t.get('order_total','')}**")
-    return "\n".join(lines)
 
-def format_items(o: dict) -> str:
-    lines = ["**Items**"]
-    for it in (o.get("items") or []):
-        row = f"- {it.get('product_name','(Unnamed)')} x{it.get('quantity','')}"
-        if it.get("unit_price"):
-            row += f" @ {it['unit_price']}"
-        if it.get("sku"):
-            row += f" (SKU: {it['sku']})"
-        if it.get("link"):
-            row += f" — [link]({it['link']})"
-        lines.append(row)
-    return "\n".join(lines)
-
-def format_tracking(o: dict) -> str:
-    tr = (o.get("tracking_numbers") or "").strip()
-    if tr:
-        return f"**Tracking**: {tr}"
-    return "_No tracking numbers recorded for this order._"
-
-def format_shipping(o: dict) -> str:
-    s = o.get("shipping") or {}
-    addr = ", ".join([v for v in [s.get("street1",""), s.get("street2",""), s.get("city",""), s.get("state",""), s.get("zip",""), s.get("country","")] if v])
-    name = s.get("name","").strip() or "(Name not set)"
-    out = [f"**Ship To**: {name}"]
-    if s.get("company"): out.append(f"- Company: {s['company']}")
-    if addr: out.append(f"- Address: {addr}")
-    if s.get("phone"): out.append(f"- Phone: {s['phone']}")
-    return "\n".join(out)
 
 
 
@@ -288,49 +224,47 @@ def compact_orders_for_llm(df: pd.DataFrame) -> dict:
 
     return {"customer": customer, "orders": orders}
 
+
+
+
 def get_gemini_summary(user_query: str, compact_json: dict) -> str:
-    """
-    Ask Gemini for a concise natural-language summary.
-    It should *not* regurgitate the raw data; it should summarize.
-    """
     system_prompt = """
 You are a precise assistant for customer order inquiries.
 
-Write a short, friendly summary of the customer's past orders.
-Rules:
-- DO NOT dump raw tables or CSV.
-- Summarize in <= 150 words when possible.
-- Mention what the customer ordered (product names), quantities, and key dates.
-- Include any item-level link URLs **only if present** in the input (no searching, no fabricated links).
-- If there are multiple orders, summarize the most recent first (by Date Ordered if present).
+You will receive:
+- `data`: a compact JSON of a SINGLE customer's orders (already filtered by the app).
+- `query`: the user's request (may be a follow-up like "details for order 1074026", "show tracking", "reorder", etc.).
+
+Your job:
+- Work ONLY with the provided JSON. Do NOT search the web. Do NOT fabricate links.
+- Understand follow-ups naturally (order IDs, tracking, items, totals, shipping, reorder suggestions).
+- Prefer the most recent order when the user does not specify.
+- If an order id is referenced, focus on that order.
+- Summaries should be concise (≈150 words), using Markdown bullets when useful.
+- If `links` exist on items, include them inline. If not, omit.
 - End with: "If you want more details (like prices, shipping, or tracking), please let me know."
-- Use clear Markdown bullets when helpful.
 """
 
-    # Sort orders by date desc if dates exist (light Python sort to help the model)
+    # Sort orders by Date Ordered desc to help the model pick "most recent"
     try:
         orders = compact_json.get("orders", [])
-        def safe_key(o):
-            return o.get("date_ordered") or ""
+        def safe_key(o): return o.get("date_ordered") or ""
         compact_json["orders"] = sorted(orders, key=safe_key, reverse=True)
     except Exception:
         pass
 
-    user_payload = {
-        "query": user_query,
-        "data": compact_json
-    }
-
+    payload = {"query": user_query, "data": compact_json}
     try:
         resp = model.models.generate_content(
             model="gemini-2.5-flash",
-            contents=[system_prompt, json.dumps(user_payload, ensure_ascii=False)],
+            contents=[system_prompt, json.dumps(payload, ensure_ascii=False)],
             config={"response_mime_type": "text/plain"}
         )
         return resp.text.strip()
     except Exception as e:
-        st.error(f"Error generating AI summary: {e}")
-        return "Sorry, I couldn't generate a summary right now."
+        st.error(f"Error generating AI response: {e}")
+        return "Sorry, I couldn't generate a response right now."
+
 
 # --- UI ---
 st.title("Customer Order Smart Chatbot")
@@ -346,84 +280,35 @@ for message in st.session_state.messages:
         st.markdown(message["content"])
 
 # Chat input
-prompt = st.chat_input("e.g., “'John Doe' Show past orders” or “john@example.com wants to reorder hoodies”")
+prompt = st.chat_input("e.g., \"'Steven Henderson' wants to reorder a T-shirt\" or \"john@acme.com show past orders\"")
 if prompt:
     with st.chat_message("user"):
         st.markdown(prompt)
     st.session_state.messages.append({"role": "user", "content": prompt})
 
-    with st.spinner("🧠 Thinking..."):
-        # Try to see if the user mentioned a *new* customer
-        info = extract_customer_info(prompt)
-        is_new_customer = any([info.get("email"), info.get("first_name"), info.get("last_name")])
+    with st.spinner("Thinking..."):
+        ctx = st.session_state.get("current_context")
+        ident = extract_customer_info(prompt)
+        has_identifier = any([ident.get("email"), ident.get("first_name"), ident.get("last_name")])
 
-        if is_new_customer:
-            # Switch context to the new customer
-            filtered = filter_customer(df, info)
+        if has_identifier:
+            # Filter dataset once per customer selection
+            filtered = filter_customer(df, ident.get("email"), ident.get("first_name"), ident.get("last_name"))
             if filtered.empty:
-                response = ("I couldn’t find a matching customer. "
-                            "Try including an email address or full name (e.g., “john@example.com” or “John Doe”).")
+                response = "I couldn’t find a matching customer. Start with an email (e.g., john@acme.com) or a quoted full name (e.g., 'Steven Henderson')."
             else:
                 compact = compact_orders_for_llm(filtered)
                 st.session_state.current_context = {"customer": compact["customer"], "orders": compact["orders"], "df": filtered.copy()}
                 response = get_gemini_summary(prompt, {"customer": compact["customer"], "orders": compact["orders"]})
-
         else:
-            # No new customer specified → treat as follow-up if we have context
-            ctx = st.session_state.current_context
             if not ctx:
-                response = ("I don’t have a customer in context yet. "
-                            "Please mention a customer name or email to begin.")
+                response = ("Please begin with an email or a quoted full name so I know the customer.\n"
+                            "Examples:\n- `john@acme.com show past orders`\n- `'Steven Henderson' wants to reorder a T-shirt`")
             else:
-                intent = detect_followup_intent(prompt)
-                orders = ctx["orders"] or []
-
-                if intent["type"] == "details":
-                    # Try to find that order
-                    oid = intent["order_id"]
-                    match = next((o for o in orders if str(o.get("order_id","")).lower() == oid.lower()), None)
-                    if match:
-                        parts = [format_order_brief(match), "", format_items(match), "", format_shipping(match), "", format_tracking(match)]
-                        response = "\n".join([p for p in parts if p])
-                    else:
-                        response = f"I couldn’t find order **{oid}** for this customer. You can ask me for 'recent orders' or specify another order number."
-
-                elif intent["type"] == "show":
-                    # Show generic slices for the most recent order
-                    if not orders:
-                        response = "There are no orders on record for this customer."
-                    else:
-                        o = orders[0]  # most recent (we sorted in get_gemini_summary; if you want, sort here too)
-                        if intent["what"] == "tracking":
-                            response = "\n".join([format_order_brief(o), "", format_tracking(o)])
-                        elif intent["what"] == "prices":
-                            response = format_order_brief(o)
-                        elif intent["what"] == "items":
-                            response = "\n".join([format_order_brief(o), "", format_items(o)])
-                        elif intent["what"] == "shipping":
-                            response = "\n".join([format_order_brief(o), "", format_shipping(o)])
-                        else:
-                            response = get_gemini_summary(prompt, {"customer": ctx["customer"], "orders": orders})
-
-                elif intent["type"] == "reorder":
-                    # Simple reorder suggestion using the most recent order's items
-                    if not orders:
-                        response = "No past items found to reorder."
-                    else:
-                        o = orders[0]
-                        lines = ["Here’s a quick reorder from the most recent order:"]
-                        for it in (o.get("items") or []):
-                            line = f"- {it.get('product_name','(Unnamed)')} x{it.get('quantity','')}"
-                            if it.get("link"):
-                                line += f" — [link]({it['link']})"
-                            lines.append(line)
-                        lines.append("\nIf you want to change quantities or pick a different order, let me know.")
-                        response = "\n".join(lines)
-
-                else:
-                    # Unknown follow-up → let LLM summarize within current context
-                    response = get_gemini_summary(prompt, {"customer": ctx["customer"], "orders": orders})
+                # Pure LLM follow-up using saved (already filtered) context
+                response = get_gemini_summary(prompt, {"customer": ctx["customer"], "orders": ctx["orders"]})
 
     with st.chat_message("assistant"):
         st.markdown(response)
     st.session_state.messages.append({"role": "assistant", "content": response})
+
