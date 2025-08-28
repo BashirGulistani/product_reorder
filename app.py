@@ -149,50 +149,79 @@ _EMAIL_START_RE = re.compile(
 # Matches a leading single-quoted name:  'Steven Henderson' wants to reorder...
 # Captures the inside of the first quote pair.
 import re
-from typing import Optional, Dict
+from typing import Dict, Optional
 
+# Regex for a full email address
 _EMAIL_START_RE = re.compile(r"^\s*([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})\b", re.I)
+
+# 
 _QUOTED_NAME_START_RE = re.compile(r"^\s*'([^']+?)'")
 
-def extract_customer_info(query: str) -> Dict[str, Optional[str]]:
-    # Leading email wins
-    m_email = _EMAIL_START_RE.match(query.strip())
-    if m_email:
-        return {"email": m_email.group(1).lower(), "first_name": None, "last_name": None}
+# NEW
+_DOMAIN_START_RE = re.compile(r"^\s*@([A-Z0-9.-]+)", re.I)
 
-    # Leading 'Full Name'
-    m_name = _QUOTED_NAME_START_RE.match(query.strip())
+def extract_customer_info(query: str) -> Dict[str, Optional[str]]:
+    """
+    Extracts customer info from a query string.
+    The query can be a full email, a domain/brand name, or a full name.
+    """
+    query = query.strip()
+    
+    # Return dictionary structure
+    result = {"email": None, "first_name": None, "last_name": None, "domain": None}
+
+    # 1. Check for a full email address (most specific)
+    m_email = _EMAIL_START_RE.match(query)
+    if m_email:
+        result["email"] = m_email.group(1).lower()
+        return result
+
+    # 2. Check for a domain name (e.g., @honehealth.com)
+    m_domain = _DOMAIN_START_RE.match(query)
+    if m_domain:
+        result["domain"] = m_domain.group(1).lower()
+        return result
+
+    # 3. Check for a quoted full name
+    m_name = _QUOTED_NAME_START_RE.match(query)
     if m_name:
         name = m_name.group(1).strip()
         if "," in name:  # "Last, First"
             last, first, *_ = [p.strip() for p in name.split(",")]
-            return {"email": None, "first_name": first or None, "last_name": last or None}
-        parts = [p for p in name.split() if p]
-        if len(parts) >= 2:
-            return {"email": None, "first_name": parts[0], "last_name": parts[-1]}
-        elif len(parts) == 1:
-            return {"email": None, "first_name": parts[0], "last_name": None}
+            result["first_name"] = first or None
+            result["last_name"] = last or None
+        else:
+            parts = [p for p in name.split() if p]
+            if len(parts) >= 2:
+                result["first_name"] = parts[0]
+                result["last_name"] = parts[-1]
+            elif len(parts) == 1:
+                result["first_name"] = parts[0]
+        return result
 
-    return {"email": None, "first_name": None, "last_name": None}
-
-
-
-
-
-
-
+    # 4. If nothing matches, return the empty dictionary
+    return result
 
 
-def filter_customer(df: pd.DataFrame, email: str | None, first_name: str | None, last_name: str | None) -> pd.DataFrame:
+
+
+
+
+
+
+
+def filter_customer(df: pd.DataFrame, email: str | None, first_name: str | None, last_name: str | None, domain: str | None) -> pd.DataFrame:
     out = df.copy()
     if email:
         # exact match on email (case-insensitive)
         out = out[out["Customer Email"].str.lower() == email.strip().lower()]
+    elif domain:
+        out = out[out["Customer Email"].str.contains(domain.strip(), case=False, na=False)]
     else:
         if first_name:
-            out = out[out["Customer First Name"].str.contains(first_name.strip(), case=False, na=False)]
+            out = out[out["Customer First Name"].str.lower() == first_name.strip().lower()]
         if last_name:
-            out = out[out["Customer Last Name"].str.contains(last_name.strip(), case=False, na=False)]
+            out = out[out["Customer Last Name"].str.lower() == last_name.strip().lower()]
     return out
 
 
@@ -371,11 +400,11 @@ if prompt:
     with st.spinner("Thinking..."):
         ctx = st.session_state.get("current_context")
         ident = extract_customer_info(prompt)
-        has_identifier = any([ident.get("email"), ident.get("first_name"), ident.get("last_name")])
+        has_identifier = any([ident.get("email"), ident.get("first_name"), ident.get("last_name"), ident.get("domain")])
 
         if has_identifier:
             # Filter dataset once per customer selection
-            filtered = filter_customer(df, ident.get("email"), ident.get("first_name"), ident.get("last_name"))
+            filtered = filter_customer(df, ident.get("email"), ident.get("first_name"), ident.get("last_name"), ident.get("domain"))
             if filtered.empty:
                 response = "I couldn’t find a matching customer. Start with an email (e.g., john@acme.com) or a quoted full name (e.g., 'Steven Henderson')."
             else:
