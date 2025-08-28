@@ -247,8 +247,9 @@ STRICT RULES:
   1) Link (if present), shown by making the product name a markdown link;
   2) Product Name;
   3) Product Brand (use `item.brand`; if missing, omit "Brand:");
-  4) Quantity;
-  5) Line Total (use `item.line_total` if present; otherwise omit).
+  4) Size;
+  5) Quantity;
+  6) Line Total (use `item.line_total` if present; otherwise omit).
 
 RECOMMENDED ITEM LINE FORMAT (Markdown list):
 - [Product Name](link) — Brand: BRAND • Qty: Q • Line total: $T
