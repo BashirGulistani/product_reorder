@@ -21,87 +21,92 @@ except Exception:
     st.stop()
 
 # --- Styling ---
-# --- Styling ---
+st.title("Past Customer Orders Chatbot")
+st.caption("Ask about a customer's orders by name or email. The AI will summarize the essentials and include product links when available.")
+
+# Top-centered input styled like a large rounded search bar
 st.markdown("""
 <style>
-    /* General App Background */
-    .stApp {
-        background-color: #f9fafc;
-        font-family: 'Segoe UI', sans-serif;
-    }
-
-    /* Title in center */
-    h1 {
-        text-align: center;
-        font-weight: 700;
-        color: #1a1a1a;
-        margin-bottom: 0.5rem;
-    }
-    .stCaption {
-        text-align: center !important;
-        display: block;
-        margin-bottom: 2rem;
-    }
-
-    /* Chat messages */
-    .stChatMessage {
-        border-radius: 16px;
-        padding: 1rem 1.25rem;
-        margin-bottom: 1rem;
-        font-size: 1rem;
-        line-height: 1.5;
-    }
-    .stChatMessage[data-testid="stChatMessage-user"] {
-        background: #e6f0ff;
-        border: 1px solid #c2dbff;
-        margin-left: auto;
-        margin-right: 0;
-        max-width: 75%;
-    }
-    .stChatMessage[data-testid="stChatMessage-assistant"] {
-        background: #ffffff;
-        border: 1px solid #e6e6e6;
-        box-shadow: 0px 2px 6px rgba(0,0,0,0.05);
-        margin-right: auto;
-        margin-left: 0;
-        max-width: 75%;
-    }
-
-    /* Chat input styled like ChatGPT */
-    div[data-baseweb="input"] {
-        border-radius: 30px !important;
-        border: 1px solid #d9d9d9 !important;
-        padding: 0.75rem 1rem !important;
-        font-size: 1rem !important;
-        box-shadow: 0px 1px 4px rgba(0,0,0,0.08);
-    }
-    div[data-baseweb="input"]:focus-within {
-        border: 1px solid #1a73e8 !important;
-        box-shadow: 0 0 0 2px rgba(26,115,232,0.2);
-    }
-
-    /* Chat input placeholder */
-    div[data-baseweb="input"] input {
-        font-size: 1rem !important;
-    }
-
-    /* Button styles */
-    .stButton>button {
-        border-radius: 30px;
-        padding: 0.6em 1.4em;
-        font-size: 1rem;
-        font-weight: 500;
-        background-color: #1a73e8;
-        color: white !important;
-        border: none;
-        cursor: pointer;
-        transition: 0.3s;
-    }
-    .stButton>button:hover {
-        background-color: #155fc9;
-    }
+/* Center the input area and make it big & pill-shaped */
+.hero-wrap { display:flex; justify-content:center; margin: 1.25rem 0 0.5rem 0; }
+.hero { width:min(900px, 92vw); }
+.hero .stTextInput>div>div {
+    border-radius: 999px !important;
+    border: 1px solid #d9d9d9 !important;
+    padding: 0.25rem 1.25rem !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+.hero .stTextInput input {
+    height: 56px !important;
+    font-size: 1.05rem !important;
+}
+.hero .stButton>button {
+    height: 48px; border-radius: 999px; padding: 0 1.25rem;
+}
 </style>
 """, unsafe_allow_html=True)
+
+# Keep a place to show validation/errors nicely
+feedback = st.empty()
+
+# Centered input form at the top.
+st.markdown('<div class="hero-wrap"><div class="hero">', unsafe_allow_html=True)
+with st.form("hero_query", clear_on_submit=False):
+    top_prompt = st.text_input(
+        label="Ask about past orders",
+        placeholder="e.g., \"'Steven Henderson' wants to reorder a T-shirt\" or \"john@acme.com show past orders\"",
+        label_visibility="collapsed",
+        key="top_query",
+    )
+    cols = st.columns([6, 1.5])
+    with cols[1]:
+        submitted = st.form_submit_button("Ask")
+st.markdown('</div></div>', unsafe_allow_html=True)
+
+# Process submit BEFORE rendering chat history, so chat appears below the input
+if submitted and top_prompt.strip():
+    with st.chat_message("user"):
+        st.markdown(top_prompt)
+    st.session_state.messages.append({"role": "user", "content": top_prompt})
+
+    with st.spinner("Thinking..."):
+        ctx = st.session_state.get("current_context")
+        ident = extract_customer_info(top_prompt)
+        has_identifier = any([ident.get("email"), ident.get("first_name"), ident.get("last_name")])
+
+        if has_identifier:
+            filtered = filter_customer(df, ident.get("email"), ident.get("first_name"), ident.get("last_name"))
+            if filtered.empty:
+                response = ("I couldn’t find a matching customer. Start with an email (e.g., john@acme.com) "
+                            "or a quoted full name (e.g., 'Steven Henderson').")
+            else:
+                compact = compact_orders_for_llm(filtered)
+                st.session_state.current_context = {
+                    "customer": compact["customer"],
+                    "orders": compact["orders"],
+                    "df": filtered.copy()
+                }
+                response = get_gemini_summary(top_prompt, {"customer": compact["customer"], "orders": compact["orders"]})
+        else:
+            if not ctx:
+                response = ("Please begin with an email or a quoted full name so I know the customer.\n"
+                            "Examples:\n- `john@acme.com show past orders`\n- `'Steven Henderson' wants to reorder a T-shirt`")
+            else:
+                response = get_gemini_summary(top_prompt, {"customer": ctx["customer"], "orders": ctx["orders"]})
+
+    with st.chat_message("assistant"):
+        st.markdown(response)
+    st.session_state.messages.append({"role": "assistant", "content": response})
+elif submitted:
+    feedback.warning("Please type a question first.")
+
+st.markdown("----")
+
+# Conversation history renders BELOW the centered input
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
+
 
 
 # --- Data ---
