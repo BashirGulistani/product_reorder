@@ -21,27 +21,88 @@ except Exception:
     st.stop()
 
 # --- Styling ---
+# --- Styling ---
 st.markdown("""
 <style>
-    * { color: black !important; }
-    .stApp { background-color: #f0f2f6; }
-    .main .block-container { padding: 2rem 5rem; }
-    .st-emotion-cache-1r4qj8v, .st-emotion-cache-1v0mbdj {
-        border: 1px solid #e6e6e6; border-radius: 10px; padding: 20px; background: #fff;
-        box-shadow: 0 4px 8px rgba(0,0,0,0.1); transition: 0.3s;
+    /* General App Background */
+    .stApp {
+        background-color: #f9fafc;
+        font-family: 'Segoe UI', sans-serif;
     }
-    .st-emotion-cache-1r4qj8v:hover, .st-emotion-cache-1v0mbdj:hover {
-        box-shadow: 0 8px 16px rgba(0,0,0,0.2);
+
+    /* Title in center */
+    h1 {
+        text-align: center;
+        font-weight: 700;
+        color: #1a1a1a;
+        margin-bottom: 0.5rem;
     }
+    .stCaption {
+        text-align: center !important;
+        display: block;
+        margin-bottom: 2rem;
+    }
+
+    /* Chat messages */
+    .stChatMessage {
+        border-radius: 16px;
+        padding: 1rem 1.25rem;
+        margin-bottom: 1rem;
+        font-size: 1rem;
+        line-height: 1.5;
+    }
+    .stChatMessage[data-testid="stChatMessage-user"] {
+        background: #e6f0ff;
+        border: 1px solid #c2dbff;
+        margin-left: auto;
+        margin-right: 0;
+        max-width: 75%;
+    }
+    .stChatMessage[data-testid="stChatMessage-assistant"] {
+        background: #ffffff;
+        border: 1px solid #e6e6e6;
+        box-shadow: 0px 2px 6px rgba(0,0,0,0.05);
+        margin-right: auto;
+        margin-left: 0;
+        max-width: 75%;
+    }
+
+    /* Chat input styled like ChatGPT */
+    div[data-baseweb="input"] {
+        border-radius: 30px !important;
+        border: 1px solid #d9d9d9 !important;
+        padding: 0.75rem 1rem !important;
+        font-size: 1rem !important;
+        box-shadow: 0px 1px 4px rgba(0,0,0,0.08);
+    }
+    div[data-baseweb="input"]:focus-within {
+        border: 1px solid #1a73e8 !important;
+        box-shadow: 0 0 0 2px rgba(26,115,232,0.2);
+    }
+
+    /* Chat input placeholder */
+    div[data-baseweb="input"] input {
+        font-size: 1rem !important;
+    }
+
+    /* Button styles */
     .stButton>button {
-        border-radius: 8px; border: 1px solid transparent; padding: 0.6em 1.2em;
-        font-size: 1em; font-weight: 500; background-color: #1a73e8; color: white !important;
-        cursor: pointer; transition: border-color 0.25s;
+        border-radius: 30px;
+        padding: 0.6em 1.4em;
+        font-size: 1rem;
+        font-weight: 500;
+        background-color: #1a73e8;
+        color: white !important;
+        border: none;
+        cursor: pointer;
+        transition: 0.3s;
     }
-    .stButton>button:hover { border-color: #1a73e8; background: #ffffff; color: black !important; }
-    .st-chat-message { border-radius: 10px; padding: 10px; }
+    .stButton>button:hover {
+        background-color: #155fc9;
+    }
 </style>
 """, unsafe_allow_html=True)
+
 
 # --- Data ---
 @st.cache_data
