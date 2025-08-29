@@ -408,7 +408,7 @@ for message in st.session_state.messages:
         st.markdown(message["content"])
 
 # Chat input
-prompt = st.chat_input("e.g., \"'Steven Henderson' wants to reorder a T-shirt\" or \"john@acme.com show past orders\"")
+prompt = st.chat_input("e.g., \"'Steven Henderson' wants to reorder a T-shirt\" or \"john@acme.com show past orders\"  \"@acme wants to reorder bottles\"")
 if prompt:
     with st.chat_message("user"):
         st.markdown(prompt)
