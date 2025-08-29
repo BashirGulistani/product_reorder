@@ -17,7 +17,7 @@ st.set_page_config(
 # --- Gemini client ---
 try:
     model = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
-    model2 = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+    client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 except Exception:
     st.error("Could not initialize Gemini client. Please set GEMINI_API_KEY in Streamlit secrets.")
     st.stop()
