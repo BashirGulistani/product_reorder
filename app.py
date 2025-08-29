@@ -95,21 +95,26 @@ st.markdown("""
 
     /* Previous styles can go here if needed */
 
-    /* New styles for the chat input box */
-    /* Targets the container to control width and centering */
-    div[data-testid="stChatInput"] {
-        width: 70% !important;
-        margin: 0 auto !important; /* Centers the reduced-width input */
+
+
+
+
+    /*
+    This targets the actual text input area within the container.
+    We make it transparent so it doesn't look like a box inside a box.
+    */
+    div[data-testid="stChatInput"] textarea {
         background-color: transparent;
+        border: none;
+        box-shadow: none;
+        height: 100px; /* Adjust the height as you like */
+        font-size: 1rem;
+        color: #1a1a1a; /* Set text color */
     }
 
-    /* Targets the actual text area for height and styling */
-    div[data-testid="stChatInput"] textarea {
-        height: 100px; /* Increase the height of the text area */
-        border-radius: 30px;
-        border: 3px solid #d9d9d9;
-        padding-top: 0.8rem;
-        padding-bottom: 0.8rem;
+    /* Style for the placeholder text */
+    div[data-testid="stChatInput"] textarea::placeholder {
+        color: #888888;
     }
 </style>
 """, unsafe_allow_html=True)
