@@ -104,6 +104,25 @@ st.markdown("""
     .stButton>button:hover {
         background-color: #155fc9;
     }
+
+    /* Previous styles can go here if needed */
+
+    /* New styles for the chat input box */
+    /* Targets the container to control width and centering */
+    div[data-testid="stChatInput"] {
+        width: 70% !important;
+        margin: 0 auto !important; /* Centers the reduced-width input */
+        background-color: transparent;
+    }
+
+    /* Targets the actual text area for height and styling */
+    div[data-testid="stChatInput"] textarea {
+        height: 100px; /* Increase the height of the text area */
+        border-radius: 30px;
+        border: 1px solid #d9d9d9;
+        padding-top: 0.8rem;
+        padding-bottom: 0.8rem;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -384,7 +403,7 @@ LENGTH & STYLE:
 
 # --- UI ---
 st.title("Past Customer Orders Chatbot")
-st.caption("Ask about a customer's orders by name or email. The AI will summarize the essentials and include product links when available.")
+#st.caption("Ask about a customer's orders by name or email. The AI will summarize the essentials and include product links when available.")
 
 
 # Chat history
