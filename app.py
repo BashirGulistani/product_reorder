@@ -378,7 +378,8 @@ def get_gemini_summary(user_query: str, compact_json: dict) -> str:
         "For each item in any order, list details in this exact order:",
         "1) Link (if present), product name as markdown link.",
         "2) Product Name.",
-        "3) Product Brand (omit if missing).",
+        "3) Supplier Name.",
+        "4) Product SKU."
         "4) Product Size.",
         "5) Quantity.",
         "6) Item Product Unit Price.",
