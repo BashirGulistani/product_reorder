@@ -300,7 +300,7 @@ def compact_orders_for_llm(filtered: pd.DataFrame) -> dict:
                 "tax": g0.get("Order Sales Tax", ""),
                 "discount": g0.get("Discount Total", ""),
                 "order_total": g0.get("Order Total", ""),
-                "payment_total": g0.get("Payment Total", "")
+                #"payment_total": g0.get("Payment Total", "")
             },
             "shipping": {
                 "name": f"{g0.get('Shipping First Name','')} {g0.get('Shipping Last Name','')}".strip(),
