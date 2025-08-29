@@ -3,6 +3,7 @@ import streamlit as st
 import pandas as pd
 import json
 from google import genai
+from openai import OpenAI
 
 # --- Page Configuration ---
 st.set_page_config(
@@ -379,12 +380,16 @@ LENGTH & STYLE:
         #    contents=[system_prompt, json.dumps(payload, ensure_ascii=False)],
         #    config={"response_mime_type": "text/plain"}
         #)
-        resp = model2.models.generate_content(
-            model="gpt-4o-mini",  
-            contents=[system_prompt, json.dumps(payload, ensure_ascii=False)],
-            config={"response_mime_type": "text/plain"}
+        resp = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": json.dumps(payload, ensure_ascii=False)}
+            ],
+            response_format={"type": "text"}  # plain text response
         )
-        return resp.text.strip()
+        return resp.choices[0].message.content.strip()
+        #return resp.text.strip()
     except Exception as e:
         st.error(f"Error generating AI response: {e}")
         return "Sorry, I couldn't generate a response right now."
