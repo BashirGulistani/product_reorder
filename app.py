@@ -442,20 +442,58 @@ if prompt:
         has_identifier = any([ident.get("email"), ident.get("first_name"), ident.get("last_name"), ident.get("domain")])
 
         if has_identifier:
-            # Filter dataset once per customer selection
-            filtered = filter_customer(df, ident.get("email"), ident.get("first_name"), ident.get("last_name"), ident.get("domain"))
+            filtered = filter_customer(
+                df,
+                ident.get("email"),
+                ident.get("first_name"),
+                ident.get("last_name"),
+                ident.get("domain")
+            )
+
             if filtered.empty:
-                response = "I couldn’t find a matching customer. Start with an email (e.g., john@acme.com) or a quoted full name (e.g., 'Steven Henderson')."
+                response = "I couldn’t find a matching customer. Start with an email (e.g., john@acme.com), a domain (e.g., @acme.com), or a quoted full name (e.g., 'Steven Henderson')."
+
+            # CASE 1: Query starts with @domain and contains 'past orders' → show table
+            elif ident.get("domain") and "past orders" in prompt.lower():
+                st.session_state.current_context = {"customer": None, "orders": [], "df": filtered.copy()}
+                cols_to_show = [
+                    "Date Ordered",
+                    "Order ID",
+                    "Product Name",
+                    "Product Brand",
+                    "Quantity",
+                    "Item Product Unit Price",
+                    "Item Subtotal",
+                    "links"
+                ]
+                display_df = filtered[cols_to_show].fillna("")
+                if "links" in display_df.columns:
+                    display_df["Product Name"] = display_df.apply(
+                        lambda r: f"[{r['Product Name']}]({r['links']})" if r["links"] else r["Product Name"],
+                        axis=1
+                    )
+                    display_df = display_df.drop(columns=["links"])
+                st.markdown(f"### 📦 All Past Orders for @{ident['domain']}")
+                st.dataframe(display_df, use_container_width=True)
+                response = f"I’ve listed all past orders for @{ident['domain']} above."
+
+            # CASE 2: @domain but not just 'past orders' → go to AI (e.g. reorder bottles)
             else:
                 compact = compact_orders_for_llm(filtered)
-                st.session_state.current_context = {"customer": compact["customer"], "orders": compact["orders"], "df": filtered.copy()}
-                response = get_gemini_summary(prompt, {"customer": compact["customer"], "orders": compact["orders"]})
+                st.session_state.current_context = {
+                    "customer": compact["customer"],
+                    "orders": compact["orders"],
+                    "df": filtered.copy()
+                }
+                response = get_gemini_summary(
+                    prompt,
+                    {"customer": compact["customer"], "orders": compact["orders"]}
+                )
         else:
             if not ctx:
-                response = ("Please begin with an email or a quoted full name so I know the customer.\n"
-                            "Examples:\n- `john@acme.com show past orders`\n- `'Steven Henderson' wants to reorder a T-shirt`")
+                response = ("Please begin with an email, domain (e.g., `@acme.com`), "
+                            "or a quoted full name (e.g., 'Steven Henderson').")
             else:
-                # Pure LLM follow-up using saved (already filtered) context
                 response = get_gemini_summary(prompt, {"customer": ctx["customer"], "orders": ctx["orders"]})
 
     with st.chat_message("assistant"):
