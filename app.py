@@ -460,7 +460,9 @@ if prompt:
                     "Date Ordered",
                     "Order ID",
                     "Product Name",
-                    "Product Brand",
+                    "Supplier Name",
+                    "Product SKU",
+                    "Product Size",
                     "Quantity",
                     "Item Product Unit Price",
                     "Item Subtotal",
@@ -473,7 +475,7 @@ if prompt:
                         axis=1
                     )
                     display_df = display_df.drop(columns=["links"])
-                st.markdown(f"### 📦 All Past Orders for @{ident['domain']}")
+                st.markdown(f"### All Past Orders for @{ident['domain']}")
                 st.dataframe(display_df, use_container_width=True)
                 response = f"I’ve listed all past orders for @{ident['domain']} above."
 
