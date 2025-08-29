@@ -390,7 +390,7 @@ def get_gemini_summary(user_query: str, compact_json: dict) -> str:
       "length": "≈150 words when possible.",
       "formatting": [
         "Use Markdown bullets.",
-        "Use **bold** where helpful.",
+        "Use bold where helpful.",
         "No raw JSON.",
         "No tables."
       ]
