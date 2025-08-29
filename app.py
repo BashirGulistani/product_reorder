@@ -107,7 +107,7 @@ st.markdown("""
 @st.cache_data
 def load_sample_data() -> pd.DataFrame:
     # Read as strings to avoid unintended numeric coercions (tracking, zip, SKUs, etc.)
-    df = pd.read_csv("order_data.csv", dtype=str, keep_default_na=True, na_values=["", "NA", "NaN", "nan"])
+    df = pd.read_csv("ALLORDERS_FNAL.csv", dtype=str, keep_default_na=True, na_values=["", "NA", "NaN", "nan"])
     # Normalize column names (strip spaces)
     df.columns = [c.strip() for c in df.columns]
     return df
@@ -249,7 +249,6 @@ def compact_orders_for_llm(filtered: pd.DataFrame) -> dict:
     """
     Build a compact, LLM-friendly JSON with brand and line_total per item.
     Brand preference: Supplier Name -> Manufacturer Name (fallback).
-    line_total = quantity * unit_price (precomputed).
     """
     if filtered.empty:
         return {"customer": None, "orders": []}
@@ -271,7 +270,7 @@ def compact_orders_for_llm(filtered: pd.DataFrame) -> dict:
         for _, r in group.iterrows():
             unit_price = _to_decimal(r.get("Item Product Unit Price", ""))
             qty = _to_int(r.get("Quantity", ""))
-            line_total = (unit_price * qty) if (unit_price is not None and qty is not None) else None
+            subtotal = _to_decimal(r.get("Item Subtotal", ""))
 
             brand = r.get("Supplier Name", "") or r.get("Manufacturer Name", "")
             link = r.get("links", "") or None
@@ -284,7 +283,7 @@ def compact_orders_for_llm(filtered: pd.DataFrame) -> dict:
                 "size": r.get("Product Size", ""),
                 "quantity": qty if qty is not None else r.get("Quantity", ""),
                 "unit_price": str(unit_price) if unit_price is not None else r.get("Item Product Unit Price", ""),
-                "line_total": str(line_total) if line_total is not None else None,
+                "unit_price": str(subtotal) if subtotal is not None else r.get("Item Subtotal", ""),
                 "link": link
             })
         orders.append({
@@ -299,8 +298,7 @@ def compact_orders_for_llm(filtered: pd.DataFrame) -> dict:
                 "delivery_total": g0.get("Delivery Total", ""),
                 "tax": g0.get("Order Sales Tax", ""),
                 "discount": g0.get("Discount Total", ""),
-                "order_total": g0.get("Order Total", ""),
-                #"payment_total": g0.get("Payment Total", "")
+                "order_total": g0.get("Order Total", "")
             },
             "shipping": {
                 "name": f"{g0.get('Shipping First Name','')} {g0.get('Shipping Last Name','')}".strip(),
@@ -338,7 +336,8 @@ STRICT RULES:
   3) Product Brand (use `item.brand`; if missing, omit "Brand:");
   4) Product Size;
   5) Quantity;
-  6) Line Total (use `item.line_total` if present; otherwise omit).
+  6) Item Product Unit Price;
+  7) Item Subtotal;
 
 RECOMMENDED ITEM LINE FORMAT (Markdown list):
 - [Product Name](link) — Brand: BRAND • Qty: Q • Line total: $T
@@ -366,7 +365,7 @@ LENGTH & STYLE:
     payload = {"query": user_query, "data": compact_json}
     try:
         resp = model.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-2.5-flash-lite",
             contents=[system_prompt, json.dumps(payload, ensure_ascii=False)],
             config={"response_mime_type": "text/plain"}
         )
