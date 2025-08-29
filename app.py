@@ -107,7 +107,7 @@ st.markdown("""
     div[data-testid="stChatInput"] textarea {
         height: 100px; /* Increase the height of the text area */
         border-radius: 30px;
-        border: 1px solid #d9d9d9;
+        border: 3px solid #d9d9d9;
         padding-top: 0.8rem;
         padding-bottom: 0.8rem;
     }
