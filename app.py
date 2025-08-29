@@ -355,6 +355,20 @@ def get_gemini_summary(user_query: str, compact_json: dict) -> str:
         "Do NOT search the web.",
         "Do NOT fabricate links."
       ],
+      "semantic_filtering": [
+          "If the user specifies a product type (e.g., 'bottles'), return ONLY items that semantically match that category.",
+          "Eliminate irrelevant items (e.g., Sweatshirts if user asked for bottles).",
+          "Use reasoning to identify products even if the name does not explicitly contain the keyword (e.g., 'h2go journey #989572' is a water bottle).",
+          "Leverage Product Size to refine classification:",
+          "- Numeric or fluid sizes (e.g., '20oz', '500ml', '1L') usually indicate bottles or drinkware.",
+          "- Apparel sizes (e.g., 'S', 'M', 'L', 'XL', '2XL') indicate clothing such as shirts, hoodies, or sweatshirts.",
+          "- Dimensions (e.g., '15in', '10x8in') may indicate bags, boxes, or non-apparel items.",
+          "Err on the side of precision: exclude items that clearly do not fit the requested product type."
+    ],
+    "performance": [
+      "Perform semantic filtering quickly without over-explaining.",
+      "Do not hallucinate new products; only use items from `data`."
+    ]
       "order_selection": [
         "If user references a specific order id, focus only on that order.",
         "If the user asks for past orders, return ALL past orders from `data`.",
