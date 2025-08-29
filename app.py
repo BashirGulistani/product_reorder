@@ -383,7 +383,7 @@ LENGTH & STYLE:
     payload = {"query": user_query, "data": compact_json}
     try:
         resp = model.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-2.5-flash-lite",
             contents=[system_prompt, json.dumps(payload, ensure_ascii=False)],
             config={"response_mime_type": "text/plain"}
         )
