@@ -72,6 +72,12 @@ st.markdown("""
         padding: 0.75rem 1rem !important;
         font-size: 1rem !important;
         box-shadow: 0px 1px 4px rgba(0,0,0,0.08);
+        
+        /* --- ADDED/MODIFIED LINES --- */
+        height: 80px;     /* Increase the height */
+        width: 70%;       /* Reduce the width */
+        margin: 0 auto;   /* Center the input box */
+        /* -------------------------- */
     }
     div[data-baseweb="input"]:focus-within {
         border: 1px solid #1a73e8 !important;
