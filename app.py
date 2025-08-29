@@ -16,6 +16,7 @@ st.set_page_config(
 # --- Gemini client ---
 try:
     model = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
+    model2 = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 except Exception:
     st.error("Could not initialize Gemini client. Please set GEMINI_API_KEY in Streamlit secrets.")
     st.stop()
@@ -357,11 +358,6 @@ STRICT RULES:
   6) Item Product Unit Price;
   7) Item Subtotal;
 
-RECOMMENDED ITEM LINE FORMAT (Markdown list):
-- [Product Name](link) — Brand: BRAND • Qty: Q • Line total: $T
-- If `link` is null, do not create a link; just show: Product Name — Brand: BRAND • Qty: Q • Line total: $T
-- If BRAND or Line total are missing, omit those segments but keep the rest.
-
 STRUCTURE YOUR ANSWER:
 1) A short order header per relevant order (e.g., **Order 12345** — Status; Date Ordered).
 2) Then an **Items** section that lists each item using the format above (one bullet per item).
@@ -382,8 +378,13 @@ LENGTH & STYLE:
 
     payload = {"query": user_query, "data": compact_json}
     try:
-        resp = model.models.generate_content(
-            model="gemini-2.5-flash",
+        #resp = model.models.generate_content(
+        #    model="gemini-2.5-flash",
+        #    contents=[system_prompt, json.dumps(payload, ensure_ascii=False)],
+        #    config={"response_mime_type": "text/plain"}
+        #)
+        resp = model2.models.generate_content(
+            model="gpt-4o-mini",  
             contents=[system_prompt, json.dumps(payload, ensure_ascii=False)],
             config={"response_mime_type": "text/plain"}
         )
