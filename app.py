@@ -127,7 +127,8 @@ st.markdown("""
 @st.cache_data
 def load_sample_data() -> pd.DataFrame:
     # Read as strings to avoid unintended numeric coercions (tracking, zip, SKUs, etc.)
-    df = pd.read_csv("ALLORDERS_FNAL.csv", dtype=str, keep_default_na=True, na_values=["", "NA", "NaN", "nan"])
+    #df = pd.read_csv("ALLORDERS_FNAL.csv", dtype=str, keep_default_na=True, na_values=["", "NA", "NaN", "nan"])
+    df = pd.read_parquet('PastOrders.parquet', dtype=str, keep_default_na=True, na_values=["", "NA", "NaN", "nan"])
     # Normalize column names (strip spaces)
     df.columns = [c.strip() for c in df.columns]
     return df
