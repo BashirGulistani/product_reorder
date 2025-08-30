@@ -293,18 +293,20 @@ def compact_orders_for_llm(filtered: pd.DataFrame) -> dict:
             qty = _to_int(r.get("Quantity", ""))
             subtotal = _to_decimal(r.get("Item Subtotal", ""))
 
-            brand = r.get("Supplier Name", "") or r.get("Manufacturer Name", "")
+            supplier = r.get("Supplier Name", "") or None
             link = r.get("links", "") or None
+            category = r.get("Category", "") or None
             items.append({
                 "product_name": r.get("Product Name", ""),
-                "brand": brand or "",
+                "supplier": supplier or "",
                 "sku": r.get("Product SKU", ""),
                 "manufacturer": r.get("Manufacturer Name", ""),
                 "color": r.get("Product Color", ""),
                 "size": r.get("Product Size", ""),
                 "quantity": qty if qty is not None else r.get("Quantity", ""),
                 "unit_price": str(unit_price) if unit_price is not None else r.get("Item Product Unit Price", ""),
-                "unit_price": str(subtotal) if subtotal is not None else r.get("Item Subtotal", ""),
+                "subtotal": str(subtotal) if subtotal is not None else r.get("Item Subtotal", ""),     
+                "category": category,
                 "link": link
             })
         orders.append({
@@ -359,11 +361,6 @@ def get_gemini_summary(user_query: str, compact_json: dict) -> str:
       "semantic_filtering": [
           "If the user specifies a product type (e.g., 'bottles'), return ONLY items that semantically match that category.",
           "Eliminate irrelevant items (e.g., Sweatshirts if user asked for bottles).",
-          "Use reasoning to identify products even if the name does not explicitly contain the keyword (e.g., 'h2go journey #989572' is a water bottle).",
-          "Leverage Product Size to refine classification:",
-          "- Numeric or fluid sizes (e.g., '20oz', '500ml', '1L') usually indicate bottles or drinkware.",
-          "- Apparel sizes (e.g., 'S', 'M', 'L', 'XL', '2XL') indicate clothing such as shirts, hoodies, or sweatshirts.",
-          "- Dimensions (e.g., '15in', '10x8in') may indicate bags, boxes, or non-apparel items.",
           "Err on the side of precision: exclude items that clearly do not fit the requested product type."
     ],
     "performance": [
@@ -373,7 +370,7 @@ def get_gemini_summary(user_query: str, compact_json: dict) -> str:
       "order_selection": [
         "If user references a specific order id, focus only on that order.",
         "If the user asks for past orders, return ALL past orders from `data`.",
-        "If the user asks for a specific product (e.g., bottles), only return orders where Product Name matches."
+        "If the user asks for a specific product (e.g., bottles), only return orders where Product Name matches. If Product Name did not match, look at category if it exists."
       ],
       "item_display_format": [
         "For each item in any order, list details in this exact order:",
