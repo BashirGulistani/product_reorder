@@ -231,10 +231,37 @@ def extract_customer_info(query: str) -> Dict[str, Optional[str]]:
 
 
 
-def filter_customer(df: pd.DataFrame, email: str | None, first_name: str | None, last_name: str | None, domain: str | None) -> pd.DataFrame:
-    out = df.copy()
-    if email:
+#def filter_customer(df: pd.DataFrame, email: str | None, first_name: str | None, last_name: str | None, domain: str | None) -> pd.DataFrame:
+#    out = df.copy()
+#    if email:
         # exact match on email (case-insensitive)
+#        out = out[out["Customer Email"].str.lower() == email.strip().lower()]
+#    elif domain:
+#        out = out[out["Customer Email"].str.contains(domain.strip(), case=False, na=False)]
+#    else:
+#        if first_name:
+#            out = out[out["Customer First Name"].str.lower() == first_name.strip().lower()]
+#        if last_name:
+#            out = out[out["Customer Last Name"].str.lower() == last_name.strip().lower()]
+#    return out
+
+
+
+
+def filter_customer(
+    df: pd.DataFrame,
+    email: str | None,
+    first_name: str | None,
+    last_name: str | None,
+    domain: str | None,
+    query: str | None  # New parameter for product search
+) -> pd.DataFrame:
+
+    out = df.copy()
+
+    # --- Step 1: Original Customer Filtering Logic ---
+    if email:
+        # Exact match on email (case-insensitive)
         out = out[out["Customer Email"].str.lower() == email.strip().lower()]
     elif domain:
         out = out[out["Customer Email"].str.contains(domain.strip(), case=False, na=False)]
@@ -243,6 +270,29 @@ def filter_customer(df: pd.DataFrame, email: str | None, first_name: str | None,
             out = out[out["Customer First Name"].str.lower() == first_name.strip().lower()]
         if last_name:
             out = out[out["Customer Last Name"].str.lower() == last_name.strip().lower()]
+
+    # --- Step 2: New Conditional Product Name Filtering Logic ---
+    if query and not out.empty:
+        # Prepare the query by splitting it into a set of unique, lowercase words
+        query_words = set(query.strip().lower().split())
+
+        # Get all unique words present in the ProductName column of the current results
+        # .dropna() handles cases where ProductName might be empty
+        # .str.split(expand=True).stack() is a robust way to get all words
+        all_product_words = set(
+            out['Product Name'].dropna().str.lower().str.split(expand=True).stack().unique()
+        )
+
+        # Find the words that are in both the query and the product names
+        matching_words = query_words.intersection(all_product_words)
+
+        # **Only filter if there is at least one matching word**
+        if matching_words:
+            # Create a regex pattern to match any of the matching words (e.g., 'word1|word2')
+            # re.escape handles any special characters in the words safely
+            regex_pattern = '|'.join(re.escape(word) for word in matching_words)
+            out = out[out['Product Name'].str.contains(regex_pattern, case=False, na=False)]
+
     return out
 
 
@@ -459,7 +509,8 @@ if prompt:
                 ident.get("email"),
                 ident.get("first_name"),
                 ident.get("last_name"),
-                ident.get("domain")
+                ident.get("domain"),
+                prompt
             )
 
             if filtered.empty:
